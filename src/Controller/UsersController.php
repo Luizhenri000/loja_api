@@ -1,31 +1,67 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Controller\AppController;
 use Cake\Datasource\Exception\RecordNotFoundException;
-use Exception;
 
-class UsersController extends AppController {
+class UsersController extends AppController
+{
+    public function index()
+    {
+        $table = $this->fetchTable('Users');
+        $result = $table->find()
+            ->where(['Users.deleted IS' => null])
+            ->contain(['Alunos.Turmas.Cursos', 'Coordenadores.Cursos'])
+            ->orderBy(['Users.id' => 'DESC'])
+            ->all()
+            ->toArray();
 
-    public function add() {
-        // Função add chamado pela rota adicionar
-        if ($this->request->is('post')) {
-            $usersTable = $this->fetchTable('Users');
-            $novoUsuario = $usersTable->newEmptyEntity();
-            $form = $this->request->getData();
-            $novoUsuario = $usersTable->patchEntity($novoUsuario, $form);
+        return $this->response
+            ->withType('application/json')
+            ->withStatus(200)
+            ->withStringBody(json_encode($result));
+    }
 
+    public function view($id = null)
+    {
+        $table = $this->fetchTable('Users');
 
-            if ($usersTable->save($novoUsuario)) {
-                $result = 'Usuário foi cadastrado com sucesso!';
-                $statusCode = 200;
-            } else {
-                $result = 'Erro ao cadastrar usuário!';
-                $statusCode = 400;
+        try {
+            $result = $table->get((int)$id, [
+                'contain' => ['Alunos.Turmas.Cursos', 'Coordenadores.Cursos'],
+            ]);
+
+            if ($result->deleted !== null) {
+                throw new RecordNotFoundException();
             }
+
+            $statusCode = 200;
+        } catch (RecordNotFoundException $e) {
+            $result = ['mensagem' => 'Usuário não encontrado.'];
+            $statusCode = 404;
+        }
+
+        return $this->response
+            ->withType('application/json')
+            ->withStatus($statusCode)
+            ->withStringBody(json_encode($result));
+    }
+
+    public function add()
+    {
+        $table = $this->fetchTable('Users');
+        $usuario = $table->newEmptyEntity();
+        $usuario = $table->patchEntity($usuario, $this->request->getData());
+
+        if ($table->save($usuario)) {
+            $result = $usuario;
+            $statusCode = 201;
         } else {
-            $result = 'Formulário não foi enviado';
+            $result = [
+                'mensagem' => 'Não foi possível cadastrar o usuário.',
+                'erros' => $usuario->getErrors(),
+            ];
             $statusCode = 400;
         }
 
@@ -35,81 +71,32 @@ class UsersController extends AppController {
             ->withStringBody(json_encode($result));
     }
 
-    // Função list, usado na rota listar
-    public function list() {
-        // String SQL que será passado pro banco de dados
-        $sql = 'SELECT * FROM users WHERE deleted IS NULL ORDER BY id DESC';
-        $statusCode = 400;
+    public function edit($id = null)
+    {
+        $table = $this->fetchTable('Users');
 
         try {
-            $result = $GLOBALS['conexao']->execute($sql)->fetchAll('assoc');
-            $statusCode = 200;
-        } catch (Exception $e) {
-            $result = "Registro não encontrado!";
-        }
+            $usuario = $table->get((int)$id);
 
-        return $this->response
-            ->withType('application/json')
-            ->withStatus($statusCode)
-            ->withStringBody(json_encode($result));
-    }
-
-    public function edit($id = null) {
-        $usuarioTable = $this->fetchTable('Users');
-        $statusCode = 404;
-
-        if ($this->request->is(['put'])) {
-            try {
-                // Pega o produto pelo id com a condição que não foi deletado
-                $usuarioAlterar = $usuarioTable->get(intval($id), conditions: ['deleted IS NULL']);
-
-                // Pega os dados enviados do put
-                $form = $this->request->getData();
-
-                // Joga
-                $usuarioAlterar = $usuarioTable->patchEntity($usuarioAlterar, $form);
-
-                // Se salvou na tabela
-                if ($usuarioTable->save($usuarioAlterar)) {
-                    $result = 'Usuario foi alterado com sucesso!';
-                    $statusCode = 200;
-                } else {
-                    $statusCode = 400;
-                    $result = 'Erro ao alterar usuario!';
-                }
-            } catch (RecordNotFoundException $e) {
-                $result = 'Registro não encontrado ou foi deletado!';
+            if ($usuario->deleted !== null) {
+                throw new RecordNotFoundException();
             }
-        } else {
-            $statusCode = 400;
-            $result = 'Formulário não foi enviado.';
-        }
 
+            $usuario = $table->patchEntity($usuario, $this->request->getData());
 
-        return $this->response
-            ->withType('application/json')
-            ->withStatus($statusCode)
-            ->withStringBody(json_encode($result));
-    }
-
-    public function delete($id = null) {
-        $statusCode = 404;
-        $usuarioTable = $this->fetchTable('Users');
-
-        try {
-            $usuarioAlterar = $usuarioTable->get(intval($id), conditions: ['deleted IS NULL']);
-
-            $usuarioTable->deleted = 0;
-
-            if ($usuarioTable->save($usuarioAlterar)) {
-                $result = 'Usuário foi deletado com sucesso!';
+            if ($table->save($usuario)) {
+                $result = $usuario;
                 $statusCode = 200;
             } else {
-                $result = 'Erro ao deletar usuário!';
+                $result = [
+                    'mensagem' => 'Não foi possível alterar o usuário.',
+                    'erros' => $usuario->getErrors(),
+                ];
                 $statusCode = 400;
             }
         } catch (RecordNotFoundException $e) {
-            $result = 'Registro não encontrado ou foi deletado!';
+            $result = ['mensagem' => 'Usuário não encontrado.'];
+            $statusCode = 404;
         }
 
         return $this->response
@@ -118,43 +105,26 @@ class UsersController extends AppController {
             ->withStringBody(json_encode($result));
     }
 
-    public function active($id = null) {
-        $statusCode = 404;
-        $usuarioTable = $this->fetchTable('Users');
+    public function delete($id = null)
+    {
+        $table = $this->fetchTable('Users');
 
         try {
-            $usuarioAlterar = $usuarioTable->get(intval($id), conditions: ['deleted IS NOT NULL']);
-            $usuarioTable->deleted = null;
+            $usuario = $table->get((int)$id);
+            $usuario->deleted = date('Y-m-d H:i:s');
 
-            if ($usuarioTable->save($usuarioAlterar)) {
-                $result = 'Usuário foi reativado com sucesso!';
+            if ($table->save($usuario)) {
+                $result = ['mensagem' => 'Usuário desativado com sucesso.'];
                 $statusCode = 200;
             } else {
-                $result = 'Erro ao reativar usuário!';
+                $result = ['mensagem' => 'Não foi possível desativar o usuário.'];
                 $statusCode = 400;
             }
         } catch (RecordNotFoundException $e) {
-            $result = 'Registro não encontrado ou foi deletado!';
+            $result = ['mensagem' => 'Usuário não encontrado.'];
+            $statusCode = 404;
         }
 
-        return $this->response
-            ->withType('application/json')
-            ->withStatus($statusCode)
-            ->withStringBody(json_encode($result));
-    }
-
-    public function find($id = null) {
-        // :id fala que vai ser trocado pelo valor de id recebido pela função
-        // que é um intval (ele tenta parsear, caso dê erro ele explode excessão)
-        $sql = 'SELECT * FROM users WHERE id = :id AND deleted IS NULL ORDER BY id DESC';
-        $statusCode = 400;
-
-        try {
-            $result = $GLOBALS['conexao']->execute($sql, ['id' => intval($id)])->fetchAll('assoc');
-            $statusCode = 200;
-        } catch (Exception $e) {
-            $result = $e->getMessage();
-        }
         return $this->response
             ->withType('application/json')
             ->withStatus($statusCode)
