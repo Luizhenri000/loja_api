@@ -7,17 +7,20 @@ use Cake\Routing\RouteBuilder;
 return function (RouteBuilder $routes): void {
     $routes->setRouteClass(DashedRoute::class);
 
-    // Rotas da API: http://localhost:8765/api/...
+    // API do Sistema Pedagógico de Agendamento
     $routes->scope('/api', function (RouteBuilder $builder): void {
         $builder->setExtensions(['json']);
 
-        $builder->resources('Produtos');
-        $builder->resources('Categorias');
-        $builder->resources('Marcas');
         $builder->resources('Users');
+        $builder->resources('Cursos');
+        $builder->resources('Turmas');
+        $builder->resources('Alunos');
+        $builder->resources('Coordenadores');
+        $builder->resources('Disponibilidades');
+        $builder->resources('Agendamentos');
+        $builder->resources('HistoricoAgendamentos');
     });
 
-    // Rotas padrão do CakePHP (página inicial etc.)
     $routes->scope('/', function (RouteBuilder $builder): void {
         $builder->connect('/', ['controller' => 'Pages', 'action' => 'display', 'home']);
         $builder->connect('/pages/*', 'Pages::display');
